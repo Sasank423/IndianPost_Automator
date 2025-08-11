@@ -1,4 +1,4 @@
-# #For Process
+# #For Process RN657545267IN
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -13,9 +13,9 @@ from xlsxwriter import Workbook
 
 
 from PIL import Image, ImageDraw, ImageFont
+
 from io import BytesIO
 import sys
-import easyocr
 import zipfile
 
 from base64 import b64decode
@@ -39,47 +39,14 @@ from tkinter.filedialog import askdirectory
 
 #For Status Extraction
 def start(df,i,l,sleep_,pdf_opt):
-    reader = easyocr.Reader(['en'])
     chrome_options = Options()
 #     chrome_options.add_argument('--headless')
 #     chrome_options.add_argument('--disable-gpu')
 #     chrome_options.add_argument('--no-sandbox')
     driver = webdriver.Chrome(options=chrome_options)
     
-    driver.get("https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx")
-    def captcha_solve():
-        link = driver.find_element(By.XPATH,"//div[@class = 'input-group']//img").get_attribute('src')
-        response = requests.get(link)
-        sleep(4)
-        image = Image.open(BytesIO(response.content))
-        image = image.convert('RGB')
-        image.save('captcha.jpg', 'JPEG')
-        
-        try:
-            result = reader.readtext('captcha.jpg')[0][1].replace(' ','')
-        except :
-            result=''
-        os.remove('captcha.jpg')
-        return result
+    driver.get("https://www.indiapost.gov.in/")
     
-    def captcha_context():
-        cap = captcha_solve()
-        if cap == '':
-            driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_imgbtnCaptcha').click()
-            return ''
-        context = driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_lblCaptcha').text
-        if context == 'Enter the First number':
-            return cap[0] if len(cap) >= 1 else ''
-        if context == 'Enter the Second number':
-            return cap[1] if len(cap) >= 2 else ''
-        if context == 'Enter the Third number':
-            return cap[2] if len(cap) >= 3 else ''
-        if context == 'Enter the Fourth number':
-            return cap[3] if len(cap) >= 4 else ''
-        if context == 'Enter the Fifth number':
-            return cap[4] if len(cap) == 5 else ''
-        return ''
-        
     pdfs = []
     df = df[i-1:l]
     df.index = range(i,l+1)
@@ -93,6 +60,7 @@ def start(df,i,l,sleep_,pdf_opt):
         rt = 0
         c = 0
         wait = WebDriverWait(driver, 10)
+        wait_ = WebDriverWait(driver, sleep_)
         while i<=l:
             try:
                 ref = df.loc[i,'RPAD Barcode No ']
@@ -103,52 +71,41 @@ def start(df,i,l,sleep_,pdf_opt):
                 if rt == 0:
                     rt = time()
                 
-                ip = wait.until(EC.presence_of_element_located((By.ID, 'ctl00_PlaceHolderMain_ucNewLegacyControl_txtOrignlPgTranNo')))
+                ip = wait.until(EC.presence_of_element_located((By.ID, 'moNumber')))
                 ip.clear()
                 ip.send_keys(ref)
-                while 'number' not in driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_lblCaptcha').text:
-                    driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_imgbtnCaptcha').click()
-                    sleep(2)
-
-                cap = ''
-                
-                t = time()
-                flag = False 
-                while cap=='':
-                    cap = captcha_context()
-                    if time()-t > 30 :
-                        flag = True 
-                        break 
-                if flag:
+        
+                try:
+                    cap = driver.find_element(By.XPATH,"//canvas[@class='captchaCanvas border border-gray-300 rounded focus:ring-2 focus:ring-[#C62829] focus:border-[#C62829] focus:outline-none']").get_attribute('aria-label')
+                    cap = cap.lstrip('CAPTCHA security verification image. Text content: ')
+                    cap = ''.join(list(map(lambda x:x.split()[-1],cap.split(','))))
+                except:
                     driver.get("https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx")
                     continue
-                driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_txtCaptcha').send_keys(cap)
+                
+                driver.find_element(By.XPATH, "//input[@class='border border-[#D6D6D6] text-black rounded-sm p-2 w-32 focus:border-[#C62829]']").send_keys(cap)
                 try:
-                    driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_btnSearch').click()
+                    driver.find_element(By.XPATH,"//div[@class='flex items-center justify-between gap-2 bg-white captch_row mt-3']//button[@class='inline-block bg-primary-50 text-primary-900 cursor-pointer rounded focus:text-white  min-w-[8rem] searchButton focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 ']").click()
                 except :
                     pass
                 t = time()
-                flag = False
-                while True:
-                    try:
-                        btn = driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_btnTrackMore')
-                        break
-                    except:
-                        pass
-                    if time()-t > sleep_:
-                        flag = True 
-                        break
                 
-                if flag:
-                    driver.get("https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx")
-                    continue  
                 try:
-                    df.loc[i,'Delivery Report'] = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[4]").text)
-                    df.loc[i,'date']   = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[1]").text)
-                    df.loc[i,'time']  = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[2]").text)
-                    df.loc[i,'office'] = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[3]").text)
+                    wait_.until(EC.presence_of_element_located((By.XPATH, "//p[@class='text-[#C62829] font-semibold p-4']")))
+                except:
+                    driver.get("https://www.indiapost.gov.in")
+                    continue
+                
+                try:
+                    table = driver.find_element(By.XPATH, "//div[@class='w-full mx-auto space-y-3']")
+                    details = table.find_elements(By.XPATH,"//div[@class='flex items-start space-x-6 border-b border-gray-300 pb-4']")[-1].text.split('\n')
+            
+                    df.loc[i,'Delivery Report'] = details[2]
+                    df.loc[i,'date']            = details[0]
+                    df.loc[i,'time']            = details[1]
+                    df.loc[i,'office']          = details[3]
                     if pdf_opt:
-                        pdfs.append((driver.execute_cdp_cmd('Page.printToPDF',{})['data'],ln+'.pdf'))
+                        pdfs.append((driver.execute_cdp_cmd('Page.printToPDF',{"printBackground": False,})['data'],ln+'.pdf'))
                     btn.click()
                     df_view.dataframe(df)
                     
