@@ -1,4 +1,4 @@
-# #For Process
+# #For Process RN657545267IN
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -13,9 +13,9 @@ from xlsxwriter import Workbook
 
 
 from PIL import Image, ImageDraw, ImageFont
+
 from io import BytesIO
 import sys
-import easyocr
 import zipfile
 
 from base64 import b64decode
@@ -37,52 +37,29 @@ from openpyxl.cell.cell import WriteOnlyCell
 from tkinter.filedialog import askdirectory
 
 
+
 #For Status Extraction
 def start(df,i,l,sleep_,pdf_opt):
-    reader = easyocr.Reader(['en'])
     chrome_options = Options()
 #     chrome_options.add_argument('--headless')
 #     chrome_options.add_argument('--disable-gpu')
 #     chrome_options.add_argument('--no-sandbox')
-    driver = webdriver.Chrome(options=chrome_options)
-    
-    driver.get("https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx")
-    def captcha_solve():
-        link = driver.find_element(By.XPATH,"//div[@class = 'input-group']//img").get_attribute('src')
-        response = requests.get(link)
-        sleep(4)
-        image = Image.open(BytesIO(response.content))
-        image = image.convert('RGB')
-        image.save('captcha.jpg', 'JPEG')
         
-        try:
-            result = reader.readtext('captcha.jpg')[0][1].replace(' ','')
-        except :
-            result=''
-        os.remove('captcha.jpg')
-        return result
-    
-    def captcha_context():
-        cap = captcha_solve()
-        if cap == '':
-            driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_imgbtnCaptcha').click()
-            return ''
-        context = driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_lblCaptcha').text
-        if context == 'Enter the First number':
-            return cap[0] if len(cap) >= 1 else ''
-        if context == 'Enter the Second number':
-            return cap[1] if len(cap) >= 2 else ''
-        if context == 'Enter the Third number':
-            return cap[2] if len(cap) >= 3 else ''
-        if context == 'Enter the Fourth number':
-            return cap[3] if len(cap) >= 4 else ''
-        if context == 'Enter the Fifth number':
-            return cap[4] if len(cap) == 5 else ''
-        return ''
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.get('https://app.indiapost.gov.in/customer-selfservice/login')
+    driver.find_element(By.XPATH,"//button[@class='flex-1 py-3 px-3 rounded-full text-sm font-medium transition-all duration-500 ease-in-out text-red-700 bg-transparent']").click()
+    driver.find_element(By.XPATH,"//input[@class='bg-white px-4 py-2.5 text-sm focus:outline-none w-full rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-s-none']").send_keys('9490017975')
+    driver.find_element(By.XPATH,"//button[@class='items-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 relative overflow-hidden flex justify-center mx-auto bg-red-700 text-white hover:bg-red-800 transition-colors py-3 h-11 rounded-md px-8 w-full mt-8']").click()
+    otp = input('Enter otp :- ')
+    driver.find_element(By.XPATH,"//input[@class='bg-white px-4 py-2.5 text-sm focus:outline-none rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-12 h-12 text-center']").send_keys(otp)
+    sleep(2)
+    driver.find_element(By.XPATH,"//button[@class='items-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 relative overflow-hidden flex justify-center mx-auto bg-red-700 text-white hover:bg-red-800 transition-colors py-3 h-11 rounded-md px-8 w-full mt-8']").click()
+    sleep(5)
+    driver.get('https://app.indiapost.gov.in/customer-selfservice/bulk-articles-tracking')
         
     pdfs = []
-    df = df[i-1:l]
-    df.index = range(i,l+1)
+    
+    df = df[i:l+1]
     df_view = st.empty()
     df_view.dataframe(df)
     cols = st.columns(4)
@@ -93,81 +70,98 @@ def start(df,i,l,sleep_,pdf_opt):
         rt = 0
         c = 0
         wait = WebDriverWait(driver, 10)
-        while i<=l:
-            try:
-                ref = df.loc[i,'RPAD Barcode No ']
-                ln = df.loc[i,'Loan No']
-                if str(ref)=='nan':
-                    i += 1
-                    continue
-                if rt == 0:
-                    rt = time()
+        wait_ = WebDriverWait(driver, sleep_)
+        # Assuming 'i', 'l', 'j', 'rt' are initialized correctly before the loop
+        j = 0
+        while i <= l:
+            # --- START: LOGIC REWORK (Part 1: Building the batch) ---
+            
+            # This check using a stale 'j' is removed as it's unreliable.
+            # The check is now done properly inside the 'for' loop.
+            
+            ref = ''
+            items_in_this_batch = 0 # Use a clear counter instead of manipulating 'j'
+            
+            # This loop correctly builds the batch and finds its size
+            for batch_offset in range(10):
+                current_index = i + batch_offset
+                if current_index > l:
+                    break # We've hit the end of the dataframe
                 
-                ip = wait.until(EC.presence_of_element_located((By.ID, 'ctl00_PlaceHolderMain_ucNewLegacyControl_txtOrignlPgTranNo')))
-                ip.clear()
-                ip.send_keys(ref)
-                while 'number' not in driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_lblCaptcha').text:
-                    driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_imgbtnCaptcha').click()
-                    sleep(2)
+                ref += df.loc[current_index, 'RPAD Barcode No '] + ','
+                items_in_this_batch += 1
 
-                cap = ''
+            # If the last batch was full and there are no more items, stop.
+            if items_in_this_batch == 0:
+                break
                 
-                t = time()
-                flag = False 
-                while cap=='':
-                    cap = captcha_context()
-                    if time()-t > 30 :
-                        flag = True 
-                        break 
-                if flag:
-                    driver.get("https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx")
-                    continue
-                driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_ucCaptcha1_txtCaptcha').send_keys(cap)
-                try:
-                    driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_btnSearch').click()
-                except :
-                    pass
-                t = time()
-                flag = False
-                while True:
-                    try:
-                        btn = driver.find_element(By.ID,'ctl00_PlaceHolderMain_ucNewLegacyControl_btnTrackMore')
-                        break
-                    except:
-                        pass
-                    if time()-t > sleep_:
-                        flag = True 
-                        break
-                
-                if flag:
-                    driver.get("https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx")
-                    continue  
-                try:
-                    df.loc[i,'Delivery Report'] = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[4]").text)
-                    df.loc[i,'date']   = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[1]").text)
-                    df.loc[i,'time']  = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[2]").text)
-                    df.loc[i,'office'] = str(driver.find_element(By.XPATH,"//table[@class = 'responsivetable MailArticleEvntOER']//tbody//tr[2]//td[3]").text)
-                    if pdf_opt:
-                        pdfs.append((driver.execute_cdp_cmd('Page.printToPDF',{})['data'],ln+'.pdf'))
-                    btn.click()
-                    df_view.dataframe(df)
+            # --- END: LOGIC REWORK (Part 1) ---
+
+
+            # --- MANDATORY SELENIUM SCRIPT (UNCHANGED AS REQUESTED) ---
+            if rt == 0:
+                rt = time()
+            
+            ip = wait.until(EC.presence_of_element_located((By.XPATH, "//textarea[@class='flex w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm min-h-32']")))
+            ip.clear()
+            ip.send_keys(ref)
+            driver.find_element(By.XPATH, "//button[@class='gap-2 whitespace-nowrap text-sm ring-offset-background duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 relative overflow-hidden w-11/12 mx-auto h-10 min-w-[8rem] bg-red-600 hover:bg-red-700 text-white font-medium rounded-md py-2 px-4 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed']").click()
+            sleep(4)
+            
+            try:
+                wait.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, "//h3[@class='text-lg font-semibold text-gray-800']")
+                    )
+                )
+            except Exception:
+                # We must still advance 'i' to avoid getting stuck in an infinite loop
+                i += items_in_this_batch
+                continue
+
+            driver.find_element(By.XPATH,"//div[@class='flex gap-2 items-center bg-orange-100 justify-center min-w-[120px] px-3 text-orange-500 rounded-lg border-2 border-orange-500 p-1']").click()
+            table = driver.find_element(By.XPATH,"//table[@class='w-full caption-bottom text-sm min-w-full']")
+            details = table.find_elements(By.XPATH,"//tbody//tr[@class='border-b transition-colors hover:bg-gray-100 data-[state=selected]:bg-gray-100 odd:bg-white even:bg-gray-50']")
+            # --- END OF MANDATORY SELENIUM SCRIPT ---
+
+
+            # --- START: LOGIC REWORK (Part 2: Processing the results) ---
+            data = []
+            print(len(details), 'this is length')
+
+            # THE CRITICAL FIX: Loop over the number of results FOUND, not a fixed number 10.
+            # This prevents the IndexError crash.
+            for _ in range(len(details)):
+                # YOUR SCRIPT LOGIC IS PRESERVED EXACTLY:
+                if _ % 2 != 0:
+                    data.append(details[_].find_elements(By.TAG_NAME,"li")[-1].text)
                     
-                    rt = str(datetime.timedelta(seconds=int(time()-rt))).split(':')
-                    st.write(str(i)+') Record '+ref+' is Completd  -  '+rt[1]+':'+rt[2])
-                    rt = 0
-                    i += 1
-                    count += 1
-                except:
-                    i-=1
-                i+=1
-                sleep(2)
-            except Exception as e:
-                c += 1
-                if c > 2:
-                    i += 1
-                    c = 0
-        ot = str(datetime.timedelta(seconds=int(time()-ot)))
-        st.write('Total time :- '+ot)
+            # This update loop from your script is correct and is preserved.
+            for k in range(len(data)):
+                detail = data[k].split('\n')
+                # Check to prevent error if split doesn't produce enough parts
+                if len(detail) >= 3:
+                    df.loc[k + i, 'Delivery Report'] = detail[0]
+                    # Use partition for a safer split on the first space only
+                    date_part, _, time_part = detail[1].partition(' ')
+                    df.loc[k + i, 'date'] = date_part
+                    df.loc[k + i, 'time'] = time_part
+                    df.loc[k + i, 'office'] = detail[2]
+
+            # The final increment is now simple and directly reflects the batch size.
+            # It achieves the exact same result as your 'i += j; i += 1' logic.
+            i += items_in_this_batch
+            df_view.dataframe(df)
+
+            elapsed = str(datetime.timedelta(seconds=int(time() - rt))).split(':')
+            st.write(f"{i}) Record {ref} Completed - {elapsed[1]}:{elapsed[2]}")
+
+            rt = 0
+
+        # After loop
+        ot = str(datetime.timedelta(seconds=int(time() - ot)))
+        st.write(f"Total time :- {ot}")
+
     return df,pdfs
 
 
@@ -282,9 +276,9 @@ if page == "Status Extraction":
             df = pd.read_excel(uploaded_file)
             if len(list(df.columns)) != 7:
                 st.error('ERROR!!! Invalid Excel Format')
-            df.columns = ['Loan No','Name','RPAD Barcode No ','date','time','office','Delivery Report']
+            df.columns = ['Loan No','Name','RPAD Barcode No ','date','time','office','Delivery Report']
             print('1')
-            for i in ['Name','RPAD Barcode No ','date','time','office','Delivery Report','Loan No']:
+            for i in ['Name','RPAD Barcode No ','date','time','office','Delivery Report','Loan No']:
                 df[i] = df[i].astype(str)
 
             if start_ == '' or not start_.isdigit():
