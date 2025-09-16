@@ -286,7 +286,7 @@ if page == "Status Extraction":
             else:
                 start_ = int(start_)
             if end == '' or not end.isdigit():
-                end = len(df['RPAD Barcode No '])
+                end = len(df['RPAD Barcode No '])
             else:
                 end = int(end)
             if sleep_ == '' or not sleep_.isdigit():
